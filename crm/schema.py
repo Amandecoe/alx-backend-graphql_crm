@@ -25,6 +25,10 @@ class CustomerInput(graphene.InputObjectType):
     email = graphene.String(required=True)
     phone = graphene.String()
 
+class ProductType(graphene.InputObjectType):
+    name = graphene.String(required=True)
+    price = graphene.Decimal(required=True)
+    stock = graphene.Int(required = False, default = 0)
 
 # Single customer creation
 class CreateCustomer(graphene.Mutation):
@@ -104,3 +108,21 @@ class BulkCreateCustomers(graphene.Mutation):
             created_customers.append(CustomerType(**customer_data))
 
         return BulkCreateCustomers(created=created_customers, errors=errors)
+
+class CreateProduct(graphene.Mutation):
+    class Arguments:
+      name = graphene.String(required=True)
+      price = graphene.Decimal(required=True)
+      stock = graphene.Int(required=True, default = 0 )
+      Product = graphene.List(ProductType)
+      def mutate(self, info, name, price,stock, Product):
+          for p in Product:
+              if p.price<0 :
+                  return "Price Can Not be Negative"
+              if p.stock < 0 :
+                  return "Stock can not be Negative"
+
+          customer_data = seed_db.add_product(name, price, stock)
+          Product.append(ProductType(**customer_data))   
+
+          return CreateProduct(created = Product, Message = "Product created successfully")   
