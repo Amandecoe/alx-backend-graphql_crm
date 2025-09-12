@@ -29,7 +29,6 @@ class ProductType(graphene.InputObjectType):
     name = graphene.String(required=True)
     price = graphene.Decimal(required=True)
     stock = graphene.Int(required = False, default = 0)
-
 # Single customer creation
 class CreateCustomer(graphene.Mutation):
     class Arguments:
@@ -126,3 +125,6 @@ class CreateProduct(graphene.Mutation):
           Product.append(ProductType(**customer_data))   
 
           return CreateProduct(created = Product, Message = "Product created successfully")   
+      
+class CreateOrder(graphene.Mutation):
+    class Arguments:
