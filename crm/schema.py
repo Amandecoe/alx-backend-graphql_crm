@@ -89,7 +89,7 @@ class CreateProduct(graphene.Mutation):
     class Arguments:
         name = graphene.String(required=True)
         price = graphene.Decimal(required=True)
-        stock = graphene.Int(required=False, default=0)
+        stock = graphene.Int(required=False)
 
     ok = graphene.Boolean()
     product = graphene.Field(ProductType)
@@ -138,6 +138,20 @@ class CreateOrder(graphene.Mutation):
 
         return CreateOrder(ok=True, order=order, message="Order created successfully")
 
+class Query(graphene.ObjectType):
+    # Add any queries you want here, e.g., list customers or products
+    customers = graphene.List(CustomerType)
+    products = graphene.List(ProductType)
+    orders = graphene.List(OrderType)
+
+    def resolve_customers(root, info):
+        return Customer.objects.all()
+
+    def resolve_products(root, info):
+        return Product.objects.all()
+
+    def resolve_orders(root, info):
+        return Order.objects.all()
 
 # --- Root Mutation ---
 class Mutation(graphene.ObjectType):
