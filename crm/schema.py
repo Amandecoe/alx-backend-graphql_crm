@@ -1,35 +1,42 @@
 import graphene
-import re
-import seed_db
+from graphene_django.types import DjangoObjectType
+from django.utils import timezone
+from graphql import GraphQLError
+from .models import Customer, Product, Order
+
+# --- Types ---
+class CustomerType(DjangoObjectType):
+    class Meta:
+        model = Customer
+        fields = ("id", "name", "email", "phone")
 
 
-# Output type
-class CustomerType(graphene.ObjectType):
-    id = graphene.ID()
-    name = graphene.String(required=True)
-    email = graphene.String(required=True)
-    phone = graphene.String()
+class ProductType(DjangoObjectType):
+    class Meta:
+        model = Product
+        fields = ("id", "name", "price", "stock")
 
 
-# Error type
-class CustomerError(graphene.ObjectType):
-    name = graphene.String()
-    email = graphene.String()
-    phone = graphene.String()
-    message = graphene.String()
+class OrderType(DjangoObjectType):
+    class Meta:
+        model = Order
+        fields = ("id", "customer", "products", "order_date", "total_amount")
 
 
-# Input type (for bulk mutation)
+# --- Input Types ---
 class CustomerInput(graphene.InputObjectType):
     name = graphene.String(required=True)
     email = graphene.String(required=True)
     phone = graphene.String()
 
-class ProductType(graphene.InputObjectType):
+
+class ProductInput(graphene.InputObjectType):
     name = graphene.String(required=True)
     price = graphene.Decimal(required=True)
-    stock = graphene.Int(required = False, default = 0)
-# Single customer creation
+    stock = graphene.Int(required=False, default=0)
+
+
+# --- Mutations ---
 class CreateCustomer(graphene.Mutation):
     class Arguments:
         name = graphene.String(required=True)
@@ -41,90 +48,100 @@ class CreateCustomer(graphene.Mutation):
     message = graphene.String()
 
     def mutate(self, info, name, email, phone=None):
-        customers = seed_db.get_customers()
+        if phone and not (phone.startswith("+2519") or phone.startswith("09")):
+            return CreateCustomer(ok=False, customer=None, message="Invalid phone format")
 
-        # Phone validation
-        if phone:
-            pattern = r"^(\+2519\d{8}|09\d{8})$"
-            if not re.match(pattern, phone):
-                return CreateCustomer(ok=False, customer=None, message="Invalid phone format")
-
-        # Duplicate email check
-        if any(c["email"] == email for c in customers):
+        if Customer.objects.filter(email=email).exists():
             return CreateCustomer(ok=False, customer=None, message="Email already exists")
 
-        # Save to seed_db
-        customer_data = seed_db.add_customer(name, email, phone)
-
-        return CreateCustomer(
-            ok=True,
-            customer=CustomerType(**customer_data),
-            message="Customer created successfully"
-        )
+        customer = Customer.objects.create(name=name, email=email, phone=phone)
+        return CreateCustomer(ok=True, customer=customer, message="Customer created successfully")
 
 
-# Bulk customer creation
 class BulkCreateCustomers(graphene.Mutation):
     class Arguments:
         customers = graphene.List(CustomerInput, required=True)
 
     created = graphene.List(CustomerType)
-    errors = graphene.List(CustomerError)
+    errors = graphene.List(graphene.String)
 
     def mutate(self, info, customers):
         created_customers = []
         errors = []
 
-        existing = seed_db.get_customers()
-
-        for cust in customers:
-            name, email, phone = cust.name, cust.email, cust.phone
-
+        for c in customers:
             # Phone validation
-            if phone:
-                pattern = r"^(\+2519\d{8}|09\d{8})$"
-                if not re.match(pattern, phone):
-                    errors.append(CustomerError(
-                        name=name,
-                        email=email,
-                        phone=phone,
-                        message="Invalid phone format"
-                    ))
-                    continue
-
-            # Duplicate email check (existing + newly added in this mutation)
-            if any(c["email"] == email for c in existing + [c.__dict__ for c in created_customers]):
-                errors.append(CustomerError(
-                    name=name,
-                    email=email,
-                    phone=phone,
-                    message="Email already exists"
-                ))
+            if c.phone and not (c.phone.startswith("+2519") or c.phone.startswith("09")):
+                errors.append(f"{c.name}: Invalid phone format")
                 continue
 
-            # Add to DB + created list
-            customer_data = seed_db.add_customer(name, email, phone)
-            created_customers.append(CustomerType(**customer_data))
+            if Customer.objects.filter(email=c.email).exists():
+                errors.append(f"{c.name}: Email already exists")
+                continue
+
+            customer = Customer.objects.create(name=c.name, email=c.email, phone=c.phone)
+            created_customers.append(customer)
 
         return BulkCreateCustomers(created=created_customers, errors=errors)
 
+
 class CreateProduct(graphene.Mutation):
     class Arguments:
-      name = graphene.String(required=True)
-      price = graphene.Decimal(required=True)
-      stock = graphene.Int(required=True, default = 0 )
-      Product = graphene.List(ProductType)
-      def mutate(self, info, name, price,stock, Product):
-          for p in Product:
-              if p.price<0 :
-                  return "Price Can Not be Negative"
-              if p.stock < 0 :
-                  return "Stock can not be Negative"
+        name = graphene.String(required=True)
+        price = graphene.Decimal(required=True)
+        stock = graphene.Int(required=False, default=0)
 
-          customer_data = seed_db.add_product(name, price, stock)
-          Product.append(ProductType(**customer_data))   
+    ok = graphene.Boolean()
+    product = graphene.Field(ProductType)
+    message = graphene.String()
 
-          return CreateProduct(created = Product, Message = "Product created successfully")   
-      
+    def mutate(self, info, name, price, stock=0):
+        if price < 0:
+            raise GraphQLError("Price cannot be negative")
+        if stock < 0:
+            raise GraphQLError("Stock cannot be negative")
+
+        product = Product.objects.create(name=name, price=price, stock=stock)
+        return CreateProduct(ok=True, product=product, message="Product created successfully")
+
+
 class CreateOrder(graphene.Mutation):
     class Arguments:
+        customer_id = graphene.Int(required=True)
+        product_ids = graphene.List(graphene.Int, required=True)
+        order_date = graphene.DateTime(required=False)
+
+    ok = graphene.Boolean()
+    order = graphene.Field(OrderType)
+    message = graphene.String()
+
+    def mutate(self, info, customer_id, product_ids, order_date=None):
+        try:
+            customer = Customer.objects.get(pk=customer_id)
+        except Customer.DoesNotExist:
+            raise GraphQLError("Invalid customer ID")
+
+        if not product_ids:
+            raise GraphQLError("At least one product must be selected")
+
+        products = Product.objects.filter(pk__in=product_ids)
+        if len(products) != len(set(product_ids)):
+            raise GraphQLError("One or more product IDs are invalid")
+
+        order = Order(customer=customer, order_date=order_date or timezone.now())
+        order.save()
+        order.products.set(products)
+
+        total_amount = sum(p.price for p in products)
+        order.total_amount = total_amount
+        order.save()
+
+        return CreateOrder(ok=True, order=order, message="Order created successfully")
+
+
+# --- Root Mutation ---
+class Mutation(graphene.ObjectType):
+    create_customer = CreateCustomer.Field()
+    bulk_create_customers = BulkCreateCustomers.Field()
+    create_product = CreateProduct.Field()
+    create_order = CreateOrder.Field()
