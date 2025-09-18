@@ -3,23 +3,26 @@ from graphene_django.types import DjangoObjectType
 from django.utils import timezone
 from graphql import GraphQLError
 from .models import Customer, Product, Order
-
+from .filters import CustomerFilter, ProductFilter, OrderFilter
 # --- Types ---
 class CustomerType(DjangoObjectType):
     class Meta:
         model = Customer
+        Filterset_class = CustomerFilter
         fields = ("id", "name", "email", "phone")
 
 
 class ProductType(DjangoObjectType):
     class Meta:
         model = Product
+        Filterset_class = ProductFilter 
         fields = ("id", "name", "price", "stock")
 
 
 class OrderType(DjangoObjectType):
     class Meta:
         model = Order
+        Filterset_class = OrderFilter
         fields = ("id", "customer", "products", "order_date", "total_amount")
 
 
@@ -143,7 +146,24 @@ class Query(graphene.ObjectType):
     customers = graphene.List(CustomerType)
     products = graphene.List(ProductType)
     orders = graphene.List(OrderType)
+    
+    all_customers = DjangoFilterConnectionField(
+        CustomerType,
+        order_by=graphene.List(of_type=graphene.String)
+    )
 
+    # Products
+    all_products = DjangoFilterConnectionField(
+        ProductType,
+        order_by=graphene.List(of_type=graphene.String)
+    )
+
+    # Orders
+    all_orders = DjangoFilterConnectionField(
+        OrderType,
+        order_by=graphene.List(of_type=graphene.String)
+    )
+    
     def resolve_customers(root, info):
         return Customer.objects.all()
 
