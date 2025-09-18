@@ -42,7 +42,15 @@ INSTALLED_APPS = [
     'crm',
 ]
 GRAPHENE = {
-    'SCHEMA': 'alx_backend_graphql_crm.schema.schema'
+    'SCHEMA': 'alx_backend_graphql_crm.schema.schema',
+    "MIDDLEWARE": [
+        "graphene_django.debug.DjangoDebugMiddleware",
+    ],
+}
+GRAPHENE_DJANGO_SETTINGS = {
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+    ]
 }
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
