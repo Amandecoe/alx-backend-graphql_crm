@@ -1,63 +1,46 @@
-from .models import Customer, Product, Order
 import django_filters
-# icontains looks up for a field, i = case-insensetive and contains verifies if it contains
-class Customerfilter(django_filters.Filterset):
-    name_contains = django_filters.CharFilter(
-        field_name = "name", lookup_Expr = "icontains"
-    )
-    email_contains = django_filters.CharFilter(
-        field_name = "email", lookup_Expr = "icontains"
-    )
-    created_at_contains = django_filters.DateFilter(
-        field_name = "created_at", lookup_Expr = "gte"
-    )
-    phone_startwith = django_filters.CharFilter(method = "phone_number_startswith")
-    
-    class meta:
+from .models import Customer, Product, Order
+
+class Customerfilter(django_filters.FilterSet):
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+    email = django_filters.CharFilter(field_name="email", lookup_expr="icontains")
+    phone = django_filters.CharFilter(method="filter_phone")
+
+    class Meta:
         model = Customer
-        Fields = ["name", "email", "created_at"]
+        fields = ["name", "email", "phone"]  # only actual model fields
 
-    def phone_number_startswith(self, queryset, name, value):
-        return queryset.filter(phone_startwith = +1) 
+    def filter_phone(self, queryset, name, value):
+        return queryset.filter(phone__startswith=value)
 
-            
 
-class Productfilter(django_filters.Filterset):
-    name_contains = django_filters.CharFilter(
-        field_name = "name", lookup_Expr = "icontains"
-    )       
-    price_contains = django_filters.RangeFilter(
-        field_name = "price", lookup_Expr = "gte"  #gte stands for greater than or equal to
-    )
-    stock_contains = django_filters.RangeFilter(
-        field_name = "stock", lookup_Expr = "gte"
-    )
-    low_stock_products = django_filters.NumberFilter (method = "product_with_low_Stock") #products with stock less than 10
-    
-    class meta:
+class Productfilter(django_filters.FilterSet):
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+    price = django_filters.RangeFilter(field_name="price")
+    stock = django_filters.RangeFilter(field_name="stock")
+    low_stock = django_filters.NumberFilter(method="filter_low_stock")
+
+    class Meta:
         model = Product
-        Fields = ["name", "price", "stock"]
+        fields = ["name", "price", "stock"]
 
-    def product_with_low_Stock(self, queryset, name, value):
-        return queryset.filter(stock_lt = 10)
+    def filter_low_stock(self, queryset, name, value):
+        return queryset.filter(stock__lt=10)
 
-class OrderFilter(django_filters.Filterset):
-    total_amount_contains = django_filters.RangeFilter(
-        field_name = total_amount, lookup_Expr = "gte"
-    )        
-    order_date_contains = django_filters.DateFilter(
-        field_name = order_date, lookup_Expr = "gte"
-    )
-    customer_name_contains = django_filters.CharFilter(
-        field_name = customer, lookup_Expr = "icontains"
-    )
-    products_name_contains = django.filters.CharFilter(
-        field_name = product, lookup_Expr = "icontains"
-    )
-    product_id = django.filter.NumberFilter(method = "filter_by_product")
 
-    def filter_by_product():
-        return queryset.Filter (products_id=2)
-    class meta:
+class Orderfilter(django_filters.FilterSet):
+    total_amount = django_filters.RangeFilter(field_name="total_amount")
+    order_date = django_filters.DateFromToRangeFilter(field_name="order_date")
+    customer_name = django_filters.CharFilter(field_name="customer__name", lookup_expr="icontains")
+    product_name = django_filters.CharFilter(method="filter_product_name")
+    product_id = django_filters.NumberFilter(method="filter_product_id")
+
+    class Meta:
         model = Order
-        Fields = ["total_amount", "order_date", "customer"]
+        fields = ["total_amount", "order_date", "customer"]
+
+    def filter_product_name(self, queryset, name, value):
+        return queryset.filter(product__name__icontains=value)
+
+    def filter_product_id(self, queryset, name, value):
+        return queryset.filter(product__id=value)
