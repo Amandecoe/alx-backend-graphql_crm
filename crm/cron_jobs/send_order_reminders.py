@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+import sys
+import os
+import logging
+from datetime import datetime, timedelta
+from gql import gql, Client
+from gql.transport.requests import RequestsHTTPTransport
+
+# Configure logging
+LOG_FILE = "/tmp/order_reminders_log.txt"
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format="%(asctime)s - %(message)s",
+)
+
+def main():
+    try:
+        # GraphQL transport setup
+        transport = RequestsHTTPTransport(
+            url="http://localhost:8000/graphql",
+            verify=True,
+            retries=3,
+        )
+        client = Client(transport=transport, fetch_schema_from_transport=True)
+
+        # Date range: last 7 days
+        today = datetime.utcnow().date()
+        week_ago = today - timedelta(days=7)
+
+        query = gql("""
+        query GetRecentOrders($from: Date!, $to: Date!) {
+          orders(orderDate_Gte: $from, orderDate_Lte: $to) {
+            id
+            customer {
+              email
+            }
+          }
+        }
+        """)
+
+        params = {"from": str(week_ago), "to": str(today)}
+
+        result = client.execute(query, variable_values=params)
+        orders = result.get("orders", [])
+
+        for order in orders:
+            order_id = order["id"]
+            customer_email = order["customer"]["email"]
+            logging.info(f"Order ID: {order_id}, Customer Email: {customer_email}")
+
+        print("Order reminders processed!")
+
+    except Exception as e:
+        logging.error(f"Error occurred: {e}")
+        print(f"Error: {e}", file=sys.stderr)
+
+if __name__ == "__main__":
+    main()
